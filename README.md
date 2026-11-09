@@ -1,185 +1,156 @@
-# 🐟 Monitoring Unit Budidaya
+# Monitoring Unit Budidaya
 
-Dashboard monitoring pelaporan dan produksi unit budidaya ikan nila dan lele di empat provinsi di Indonesia. Project ini dikembangkan untuk membantu memantau aktivitas pelaporan unit, mengukur progres pelaporan, memonitor produksi, serta mengidentifikasi data yang memerlukan tindak lanjut.
+Pipeline data dan dashboard untuk memantau pelaporan dan produksi unit budidaya ikan nila dan lele di empat provinsi. Project ini mensimulasikan masalah yang umum muncul saat data dikumpulkan dari banyak daerah: format laporan berbeda-beda, data kosong, duplikat, dan angka tidak wajar. Data tersebut digabung, dibersihkan, divalidasi, disimpan di database, lalu ditampilkan dalam dashboard.
 
-## 🌐 Live Dashboard
+**[Buka dashboard](https://monitoring-budidaya-cepk2nbnx5dtncoixs8bvu.streamlit.app/)**
 
-**[Buka Dashboard Monitoring Budidaya](https://monitoring-budidaya-cepk2nbnx5dtncoixs8bvu.streamlit.app/)**
+> Seluruh data dalam project ini adalah **data simulasi** yang dibuat dengan script, bukan data resmi atau data operasional instansi mana pun.
 
-## 📌 Tentang Project
+![Tampilan dashboard](docs/dashboard.png)
 
-Monitoring Unit Budidaya merupakan aplikasi berbasis web yang dibangun menggunakan Python dan Streamlit. Aplikasi ini mengolah data pelaporan dan produksi budidaya ikan menjadi informasi yang lebih terstruktur melalui visualisasi data interaktif.
+## Ringkasan
 
-Project ini menggunakan data simulasi untuk menggambarkan proses monitoring unit budidaya ikan nila dan lele di empat provinsi, yaitu:
-
-- Jawa Barat
-- Jawa Tengah
-- Jawa Timur
-- Sulawesi Selatan
-
-## 🎯 Tujuan Project
-
-- Memantau jumlah lokasi atau unit budidaya yang terdaftar.
-- Mengetahui persentase unit yang telah melakukan pelaporan.
-- Memonitor perkembangan produksi budidaya ikan.
-- Mengidentifikasi data bermasalah.
-- Menampilkan lokasi yang belum melakukan pelaporan dalam periode tertentu.
-- Menyajikan informasi melalui dashboard interaktif untuk mendukung proses monitoring dan evaluasi.
-
-## ✨ Fitur Dashboard
-
-### 1. Ringkasan Monitoring
-Menampilkan informasi utama dalam bentuk kartu indikator (KPI), meliputi:
-- Jumlah lokasi terdaftar.
-- Persentase lokasi yang sudah melapor.
-- Total produksi bulan terakhir.
-- Jumlah data bermasalah.
-
-### 2. Progres Pelaporan per Provinsi
-Visualisasi persentase lokasi yang melakukan pelaporan pada minggu terakhir berdasarkan provinsi.
-
-### 3. Daftar Lokasi yang Perlu Ditindaklanjuti
-Menampilkan unit yang belum melakukan pelaporan dalam dua minggu terakhir, dilengkapi informasi provinsi, kabupaten, tanggal laporan terakhir, dan filter provinsi.
-
-### 4. Produksi Mingguan
-Menampilkan perkembangan total produksi budidaya ikan dalam satuan kilogram.
-
-### 5. Produksi per Komoditas
-Menyajikan perbandingan produksi ikan nila dan lele dalam satuan ton.
-
-## 🛠️ Teknologi yang Digunakan
-
-| Teknologi | Kegunaan |
+| | |
 |---|---|
-| Python | Bahasa pemrograman utama |
-| Pandas | Pengolahan dan analisis data |
-| OpenPyXL | Membaca dan mengolah file Excel |
-| Streamlit | Pengembangan dashboard interaktif |
-| Altair | Visualisasi data |
-| SQLite | Penyimpanan data dalam database |
-| Git & GitHub | Version control dan pengelolaan repository |
-| Streamlit Community Cloud | Deployment aplikasi |
+| Unit terdaftar | 120 unit di 4 provinsi (Jawa Barat, Jawa Tengah, Jawa Timur, Sulawesi Selatan) |
+| Sumber data | 4 file dengan format berbeda (2 Excel, 2 CSV) |
+| Baris dibaca | 866 |
+| Lolos validasi | 790 (91,2%) |
+| Dicatat sebagai bermasalah | 76 (8,8%) |
+| Teknologi | Python, pandas, SQLite, SQL, Altair, Streamlit |
 
-## 📂 Struktur Project
+## Alur data
 
-```text
+```
+Data mentah dari daerah (Excel/CSV, format berbeda-beda)
+        |
+        v
+Pipeline pembersihan dan validasi (pandas)  ----> Log data bermasalah
+        |
+        v
+Database SQLite (tabel, foreign key, view)
+        |
+        v
+Query SQL rekap  ---->  Dashboard Streamlit
+```
+
+### 1. Data mentah yang sengaja berantakan
+
+`pipeline/generate_data.py` membuat empat file laporan dengan format yang berbeda untuk meniru kondisi nyata:
+
+| Sumber | Format | Tanggal | Satuan produksi | Keunikan |
+|---|---|---|---|---|
+| Jawa Barat | Excel | `26/10/2026` | kg | Nama kolom berbahasa Indonesia |
+| Jawa Tengah | CSV | `2026-10-26` | **ton** | Nama kolom berbeda |
+| Jawa Timur | Excel | `26 Okt 2026` | kg | Huruf besar-kecil dan spasi tidak konsisten |
+| Sulawesi Selatan | CSV | `26-10-26` | kg | Pemisah `;`, desimal koma, istilah status berbeda |
+
+Ke dalam data juga disisipkan duplikat, sel kosong, angka tidak wajar, dan unit yang tidak terdaftar.
+
+### 2. Pembersihan dan validasi
+
+`pipeline/clean_data.py` menyeragamkan nama kolom, format tanggal, satuan (ton menjadi kg), dan penulisan teks, lalu menerapkan delapan aturan validasi:
+
+| Aturan | Jumlah baris |
+|---|---|
+| Duplikat | 24 |
+| Produksi kosong | 16 |
+| Unit tidak dikenal (tidak ada di data master) | 12 |
+| Produksi di luar batas (negatif atau di atas 500 kg per laporan) | 9 |
+| Tanggal kosong atau tidak valid | 8 |
+| Komoditas kosong | 8 |
+| Komoditas berbeda dengan data master | 0 |
+| Status tidak dikenal | 0 |
+
+Satu baris bisa gagal lebih dari satu aturan. Baris yang gagal **tidak dibuang diam-diam**: semuanya dicatat di `data/processed/data_bermasalah.csv` lengkap dengan file asal, nomor baris, dan alasannya, sehingga bisa ditelusuri dan diperbaiki di sumbernya.
+
+### 3. Database
+
+`pipeline/load_db.py` memuat data bersih ke SQLite dengan skema berikut:
+
+- `lokasi`: daftar resmi unit (primary key `unit_id`)
+- `laporan`: laporan bersih, dengan foreign key ke `lokasi`, aturan `UNIQUE (unit_id, tanggal)`, dan `CHECK` untuk status serta produksi tidak negatif
+- `masalah_data`: log baris yang gagal validasi
+- `v_laporan`: view yang menggabungkan laporan dan lokasi, serta menghitung minggu pelaporan
+
+Aturan di tingkat database menjadi lapisan pengaman kedua: data yang lolos dari pipeline tapi melanggar aturan akan ditolak oleh database.
+
+### 4. Query dan dashboard
+
+Enam query rekap ada di `sql/queries.sql` (ringkasan, progres per provinsi, produksi per komoditas, lokasi yang belum melapor, tren mingguan, kualitas data per sumber). Dashboard memakai query yang sama, jadi angka di dashboard selalu bisa dicek ulang lewat SQL.
+
+Dashboard menampilkan:
+- Empat indikator utama: lokasi terdaftar, persentase sudah melapor, produksi bulan terakhir, dan data bermasalah
+- Progres pelaporan per provinsi
+- Daftar lokasi tanpa laporan dalam 2 minggu terakhir, dengan filter provinsi dan jumlah hari tanpa laporan
+- Tren produksi mingguan dan produksi per komoditas
+- Ringkasan kualitas data dari pipeline
+
+## Keputusan desain dan asumsi
+
+- **Laporan yang tidak valid tidak dihitung sebagai progres.** Unit yang laporannya gagal validasi bisa tampak "belum melapor" sampai datanya diperbaiki. Ini disengaja agar data yang meragukan tidak mengangkat angka pelaporan.
+- **Batas 500 kg per laporan adalah asumsi simulasi**, bukan standar resmi. Nilainya bisa diubah lewat `MAKS_PRODUKSI_KG` di `pipeline/clean_data.py`.
+- **Duplikat hanya mencakup baris yang kembar persis.** Dua laporan berbeda untuk unit dan tanggal yang sama belum dideteksi sebagai konflik (lihat rencana pengembangan).
+- **Data dibuat deterministik** (`random.seed(42)`), sehingga hasilnya sama setiap kali dijalankan.
+
+## Menjalankan secara lokal
+
+Prasyarat: Python 3.11 atau lebih baru.
+
+```bash
+git clone https://github.com/AdindaClaraPutriMaharani/monitoring-budidaya.git
+cd monitoring-budidaya
+
+python -m venv .venv
+.venv\Scripts\Activate.ps1        # Windows PowerShell
+pip install -r requirements.txt
+
+streamlit run dashboard/app.py
+```
+
+Kalau `data/monitoring.db` belum ada, dashboard menjalankan pipeline sendiri. Pipeline juga bisa dijalankan satu per satu:
+
+```bash
+python pipeline/generate_data.py   # membuat data mentah dan data master
+python pipeline/clean_data.py      # membersihkan dan memvalidasi
+python pipeline/load_db.py         # memuat ke SQLite
+python pipeline/run_queries.py     # menampilkan hasil query di terminal
+```
+
+## Struktur project
+
+```
 monitoring-budidaya/
-│
-├── .streamlit/
-│
-├── dashboard/
-│   └── app.py
-│
+├── .streamlit/config.toml     # tema dashboard
+├── dashboard/app.py           # dashboard Streamlit
 ├── data/
-│   ├── raw/
-│   ├── reference/
-│   └── processed/
-│
+│   ├── raw/                   # 4 file laporan simulasi (format berbeda)
+│   └── reference/             # daftar unit resmi (data master)
+├── docs/                      # tangkapan layar untuk README
 ├── pipeline/
-│   ├── generate_data.py
-│   ├── clean_data.py
-│   └── load_db.py
-│
-├── sql/
-│
-├── .gitignore
+│   ├── generate_data.py       # pembuat data simulasi
+│   ├── clean_data.py          # pembersihan dan validasi
+│   ├── load_db.py             # pemuatan ke SQLite
+│   └── run_queries.py         # menjalankan query di sql/queries.sql
+├── sql/queries.sql            # query rekap
 ├── requirements.txt
 └── README.md
 ```
 
-## ⚙️ Instalasi dan Menjalankan Project
+`data/processed/` dan `data/monitoring.db` dibuat otomatis saat pipeline dijalankan, sehingga tidak disertakan di repository.
 
-Ikuti langkah berikut untuk menjalankan aplikasi secara lokal.
+## Deployment
 
-### 1. Clone Repository
+Dashboard di-deploy di Streamlit Community Cloud (repository `AdindaClaraPutriMaharani/monitoring-budidaya`, branch `main`, file utama `dashboard/app.py`, Python 3.12). Aplikasi gratis akan "tidur" jika lama tidak dibuka, sehingga pembukaan pertama bisa memerlukan beberapa saat.
 
-```bash
-git clone https://github.com/USERNAME/monitoring-budidaya.git
-```
+## Rencana pengembangan
 
-Masuk ke folder project:
+- [ ] Laporan mingguan otomatis dalam format Excel atau PDF
+- [ ] Deteksi konflik: dua laporan berbeda untuk unit dan tanggal yang sama
+- [ ] Peta sebaran unit per kabupaten
+- [ ] Uji otomatis (pytest) untuk aturan validasi
+- [ ] Migrasi ke PostgreSQL
 
-```bash
-cd monitoring-budidaya
-```
+## Kredit
 
-Ganti `USERNAME` dengan username GitHub pemilik repository.
-
-### 2. Buat Virtual Environment
-
-```bash
-python -m venv .venv
-```
-
-Aktifkan virtual environment.
-
-**Windows (PowerShell):**
-
-```powershell
-.venv\Scripts\Activate.ps1
-```
-
-### 3. Instal Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Jalankan Dashboard
-
-```bash
-streamlit run dashboard/app.py
-```
-
-Aplikasi akan terbuka melalui browser menggunakan alamat lokal yang diberikan oleh Streamlit.
-
-## 🔄 Alur Pengolahan Data
-
-Project ini menggunakan pipeline pengolahan data yang terdiri dari beberapa tahapan:
-
-1. **Generate Data:** Membuat data simulasi pelaporan dan produksi budidaya.
-2. **Clean Data:** Menggabungkan sumber data, menyeragamkan format, melakukan normalisasi, dan validasi data.
-3. **Load Database:** Memasukkan hasil pengolahan data ke dalam database SQLite.
-4. **Dashboard:** Mengambil data dari database dan menyajikannya dalam bentuk indikator, tabel, dan grafik interaktif.
-
-## 📊 Cakupan Data
-
-| Informasi | Keterangan |
-|---|---|
-| Jumlah lokasi | 120 unit |
-| Wilayah | 4 provinsi |
-| Komoditas | Ikan nila dan lele |
-| Jenis data | Data pelaporan dan produksi |
-| Sumber data | Data simulasi |
-| Format sumber | CSV dan Excel |
-
-## 🚀 Deployment
-
-Aplikasi ini di-deploy menggunakan **Streamlit Community Cloud** dan terhubung dengan repository GitHub.
-
-Konfigurasi deployment:
-
-- Repository: `USERNAME/monitoring-budidaya`
-- Branch: `main`
-- Main file path: `dashboard/app.py`
-- Python version: 3.12
-
-**Link aplikasi:**  
-https://monitoring-budidaya-cepk2nbnx5dtncoixs8bvu.streamlit.app/
-
-## 📝 Catatan
-
-- Project ini menggunakan data simulasi, bukan data operasional atau data resmi.
-- Angka dan hasil visualisasi dapat berubah sesuai dengan data simulasi yang dihasilkan.
-- Folder environment, database hasil generate, dan data processed tidak disertakan dalam repository.
-- Aplikasi menjalankan pipeline untuk menyiapkan data ketika database belum tersedia.
-
-## 👩‍💻 Author
-
-Adinda Clara Putri Maharani
-
-Developed as a data processing and visualization project using Python, Pandas, SQLite, and Streamlit.
-
----
-
-⭐ Jika project ini bermanfaat, jangan lupa berikan star pada repository ini!
+Dibuat oleh Adinda Clara Putri Maharani sebagai project pengolahan dan visualisasi data dengan Python, pandas, SQLite, dan Streamlit. Serta dibantu Claude AI <3
